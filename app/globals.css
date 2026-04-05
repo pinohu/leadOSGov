@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gov-navy: #1C1E54;
+  --gov-gold: #C9A84C;
+}
+
+body {
+  background: #0A0B1A;
+  color: #E8E6FF;
+  font-family: -apple-system, 'Segoe UI', sans-serif;
+}
+
+.btn-primary {
+  @apply bg-[#C9A84C] text-[#0A0B1A] font-semibold px-6 py-3 rounded-lg hover:opacity-90 transition-opacity;
+}
+
+.btn-secondary {
+  @apply border border-[#C9A84C]/30 text-[#C9A84C] font-semibold px-6 py-3 rounded-lg hover:bg-[#C9A84C]/10 transition-colors;
+}
+
+.card {
+  @apply bg-[#12143A] border border-white/10 rounded-xl p-6;
+}
