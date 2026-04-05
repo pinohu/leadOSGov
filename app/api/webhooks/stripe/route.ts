@@ -12,20 +12,30 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET!)
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    )
   } catch {
     return new Response('Invalid signature', { status: 400 })
   }
 
   if (event.type === 'checkout.session.completed') {
-    const session = event.data.object as Stripe.CheckoutSession
+    // Stripe v17: Stripe.Checkout.Session (not Stripe.CheckoutSession)
+    const session = event.data.object as Stripe.Checkout.Session
     const customerId = session.customer as string
     const subscriptionId = session.subscription as string
     const customerEmail = session.customer_details?.email
 
     if (customerEmail) {
       await db.update(users)
-        .set({ plan: 'starter', stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, updatedAt: new Date() })
+        .set({
+          plan: 'starter',
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscriptionId,
+          updatedAt: new Date(),
+        })
         .where(eq(users.email, customerEmail))
     }
   }
