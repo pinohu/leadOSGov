@@ -1,6 +1,6 @@
 import { Webhook } from 'svix'
 import { headers } from 'next/headers'
-import { WebhookEvent } from '@clerk/nextjs/server'
+import type { WebhookEvent } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import { users } from '@/lib/db/schema'
 import { eq } from 'drizzle-orm'
@@ -20,12 +20,15 @@ export async function POST(req: Request) {
 
   const payload = await req.json()
   const body = JSON.stringify(payload)
-
   const wh = new Webhook(WEBHOOK_SECRET)
-  let evt: WebhookEvent
 
+  let evt: WebhookEvent
   try {
-    evt = wh.verify(body, { 'svix-id': svix_id, 'svix-timestamp': svix_timestamp, 'svix-signature': svix_signature }) as WebhookEvent
+    evt = wh.verify(body, {
+      'svix-id': svix_id,
+      'svix-timestamp': svix_timestamp,
+      'svix-signature': svix_signature,
+    }) as WebhookEvent
   } catch {
     return new Response('Invalid signature', { status: 400 })
   }
@@ -43,7 +46,12 @@ export async function POST(req: Request) {
   if (evt.type === 'user.updated') {
     const { id, email_addresses, first_name, last_name } = evt.data
     await db.update(users)
-      .set({ email: email_addresses[0]?.email_address || '', firstName: first_name, lastName: last_name, updatedAt: new Date() })
+      .set({
+        email: email_addresses[0]?.email_address || '',
+        firstName: first_name,
+        lastName: last_name,
+        updatedAt: new Date(),
+      })
       .where(eq(users.id, id))
   }
 
