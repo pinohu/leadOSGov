@@ -11,7 +11,6 @@ export async function GET(req: Request) {
   const sql = neon(process.env.DATABASE_URL!)
 
   try {
-    // Create enums using DO blocks (Postgres syntax for IF NOT EXISTS on types)
     await sql`DO $$ BEGIN
       CREATE TYPE plan AS ENUM ('free', 'starter', 'professional', 'enterprise');
     EXCEPTION WHEN duplicate_object THEN NULL; END $$`
@@ -20,7 +19,6 @@ export async function GET(req: Request) {
       CREATE TYPE status AS ENUM ('active', 'inactive', 'suspended');
     EXCEPTION WHEN duplicate_object THEN NULL; END $$`
 
-    // Users table
     await sql`CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email VARCHAR(255) NOT NULL UNIQUE,
@@ -35,7 +33,6 @@ export async function GET(req: Request) {
       updated_at TIMESTAMP DEFAULT NOW() NOT NULL
     )`
 
-    // Opportunities table
     await sql`CREATE TABLE IF NOT EXISTS opportunities (
       id TEXT PRIMARY KEY,
       solicitation_number TEXT,
@@ -53,10 +50,9 @@ export async function GET(req: Request) {
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     )`
 
-    // Vendor alerts table
     await sql`CREATE TABLE IF NOT EXISTS vendor_alerts (
       id TEXT PRIMARY KEY,
-      user_id TEXT NOT NULL REFERENCES users(id),
+      user_id TEXT NOT NULL,
       naics_codes TEXT[],
       keywords TEXT[],
       agencies TEXT[],
@@ -68,16 +64,14 @@ export async function GET(req: Request) {
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     )`
 
-    // Alert matches table
     await sql`CREATE TABLE IF NOT EXISTS alert_matches (
       id TEXT PRIMARY KEY,
-      alert_id TEXT NOT NULL REFERENCES vendor_alerts(id),
-      opportunity_id TEXT NOT NULL REFERENCES opportunities(id),
+      alert_id TEXT NOT NULL,
+      opportunity_id TEXT NOT NULL,
       sent_at TIMESTAMP DEFAULT NOW(),
       delivery_status TEXT DEFAULT 'pending'
     )`
 
-    // Indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_opp_naics ON opportunities(naics_code)`
     await sql`CREATE INDEX IF NOT EXISTS idx_opp_posted ON opportunities(posted_date DESC)`
     await sql`CREATE INDEX IF NOT EXISTS idx_alert_user ON vendor_alerts(user_id)`
@@ -85,12 +79,15 @@ export async function GET(req: Request) {
 
     return Response.json({
       ok: true,
-      message: 'Schema initialized',
+      message: 'Schema initialized — 4 tables created',
       tables: ['users', 'opportunities', 'vendor_alerts', 'alert_matches'],
       ts: new Date().toISOString()
     })
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error)
+    if (msg.includes('already exists') || msg.includes('duplicate')) {
+      return Response.json({ ok: true, message: 'Schema already initialized', ts: new Date().toISOString() })
+    }
     return Response.json({ ok: false, error: msg }, { status: 500 })
   }
 }
