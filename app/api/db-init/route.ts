@@ -2,23 +2,20 @@ import { neon } from '@neondatabase/serverless'
 
 export async function GET(req: Request) {
   const url = new URL(req.url)
-  const secret = url.searchParams.get('secret')
-
-  if (secret !== 'CROP-ADMIN-2026-IKE') {
+  if (url.searchParams.get('secret') !== 'CROP-ADMIN-2026-IKE') {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const sql = neon(process.env.DATABASE_URL!)
+  const log: string[] = []
 
   try {
-    await sql`DO $$ BEGIN
-      CREATE TYPE plan AS ENUM ('free', 'starter', 'professional', 'enterprise');
-    EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+    // Enums
+    await sql`DO $$ BEGIN CREATE TYPE plan AS ENUM ('free','starter','professional','enterprise'); EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+    await sql`DO $$ BEGIN CREATE TYPE status AS ENUM ('active','inactive','suspended'); EXCEPTION WHEN duplicate_object THEN NULL; END $$`
+    log.push('enums ok')
 
-    await sql`DO $$ BEGIN
-      CREATE TYPE status AS ENUM ('active', 'inactive', 'suspended');
-    EXCEPTION WHEN duplicate_object THEN NULL; END $$`
-
+    // Users
     await sql`CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       email VARCHAR(255) NOT NULL UNIQUE,
@@ -32,24 +29,36 @@ export async function GET(req: Request) {
       created_at TIMESTAMP DEFAULT NOW() NOT NULL,
       updated_at TIMESTAMP DEFAULT NOW() NOT NULL
     )`
+    log.push('users ok')
 
+    // Opportunities — create then add columns if missing
     await sql`CREATE TABLE IF NOT EXISTS opportunities (
       id TEXT PRIMARY KEY,
-      solicitation_number TEXT,
       title TEXT NOT NULL,
-      agency TEXT,
-      naics_code TEXT,
-      posted_date TIMESTAMP,
-      response_deadline TIMESTAMP,
-      place_of_performance TEXT,
-      contract_type TEXT,
-      estimated_value INTEGER,
-      description TEXT,
-      sam_gov_link TEXT,
-      is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     )`
+    const oppCols = [
+      "solicitation_number TEXT",
+      "agency TEXT",
+      "naics_code TEXT",
+      "posted_date TIMESTAMP",
+      "response_deadline TIMESTAMP",
+      "place_of_performance TEXT",
+      "contract_type TEXT",
+      "estimated_value INTEGER",
+      "description TEXT",
+      "sam_gov_link TEXT",
+      "is_active BOOLEAN DEFAULT TRUE"
+    ]
+    for (const col of oppCols) {
+      const colName = col.split(' ')[0]
+      try {
+        await sql(\`ALTER TABLE opportunities ADD COLUMN IF NOT EXISTS \${colName} \${col.split(' ').slice(1).join(' ')}\`)
+      } catch {}
+    }
+    log.push('opportunities ok')
 
+    // Vendor alerts
     await sql`CREATE TABLE IF NOT EXISTS vendor_alerts (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -63,7 +72,9 @@ export async function GET(req: Request) {
       is_active BOOLEAN DEFAULT TRUE,
       created_at TIMESTAMP DEFAULT NOW() NOT NULL
     )`
+    log.push('vendor_alerts ok')
 
+    // Alert matches
     await sql`CREATE TABLE IF NOT EXISTS alert_matches (
       id TEXT PRIMARY KEY,
       alert_id TEXT NOT NULL,
@@ -71,23 +82,17 @@ export async function GET(req: Request) {
       sent_at TIMESTAMP DEFAULT NOW(),
       delivery_status TEXT DEFAULT 'pending'
     )`
+    log.push('alert_matches ok')
 
+    // Indexes
     await sql`CREATE INDEX IF NOT EXISTS idx_opp_naics ON opportunities(naics_code)`
     await sql`CREATE INDEX IF NOT EXISTS idx_opp_posted ON opportunities(posted_date DESC)`
     await sql`CREATE INDEX IF NOT EXISTS idx_alert_user ON vendor_alerts(user_id)`
-    await sql`CREATE INDEX IF NOT EXISTS idx_match_alert ON alert_matches(alert_id)`
+    log.push('indexes ok')
 
-    return Response.json({
-      ok: true,
-      message: 'Schema initialized — 4 tables created',
-      tables: ['users', 'opportunities', 'vendor_alerts', 'alert_matches'],
-      ts: new Date().toISOString()
-    })
-  } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : String(error)
-    if (msg.includes('already exists') || msg.includes('duplicate')) {
-      return Response.json({ ok: true, message: 'Schema already initialized', ts: new Date().toISOString() })
-    }
-    return Response.json({ ok: false, error: msg }, { status: 500 })
+    return Response.json({ ok: true, message: 'Schema ready', log, ts: new Date().toISOString() })
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return Response.json({ ok: false, error: msg, log }, { status: 500 })
   }
 }
