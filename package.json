@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6.0.0",
-    "@inngest/sdk": "^3.0.0",
+    "inngest": "^3.22.0",
     "@neondatabase/serverless": "^0.10.0",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
